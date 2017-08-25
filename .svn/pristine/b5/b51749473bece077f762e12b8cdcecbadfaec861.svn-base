@@ -1,0 +1,243 @@
+//
+//  ViewController.m
+//  CardIO
+//
+//  Created by Fred on 7/11/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import "ViewController.h"
+
+#import "CardManager.h"
+
+@interface ViewController ()
+
+@end
+
+@implementation ViewController{
+    NSMutableArray *rectanglePoint;
+    NSDictionary *rectangleMap;
+    CIRectangleFeature *rectangleFeature;
+    CGFloat currentScale;
+    CGFloat widhtAdd;
+    CGFloat heightAdd;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    rectangleMap = [[NSDictionary alloc] initWithObjectsAndKeys: [NSNumber numberWithInt:0], @"topLeft",
+                                                                 [NSNumber numberWithInt:1], @"topRight",
+                                                                 [NSNumber numberWithInt:2], @"bottomRight",
+                                                                 [NSNumber numberWithInt:3], @"bottomLeft", nil];
+    
+}
+
+-(void)viewWillAppear:(BOOL)animated{
+    if (self.imageData) {
+        UIImage *image = [UIImage imageWithData:self.imageData];
+        [self scanImageCard:image];
+    }
+}
+
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+-(void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info {
+    
+    [self.imagePicked.layer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    UIImage *image = [info objectForKey:UIImagePickerControllerOriginalImage];
+    [self scanImageCard:image];
+    
+}
+
+-(void)scanImageCard:(UIImage *)image {
+    NSLog(@"image width height:%f %f", image.size.width, image.size.height);
+    NSLog(@"view width height:%f %f", self.imagePicked.frame.size.width, self.imagePicked.frame.size.height);
+    
+    CGFloat scaleWidth = image.size.width/self.imagePicked.frame.size.width;
+    CGFloat scaleHeight = image.size.height/self.imagePicked.frame.size.height;
+    currentScale = 1;
+    widhtAdd = 0;
+    heightAdd = 0;
+    if(image.size.width/image.size.height > self.imagePicked.frame.size.width/self.imagePicked.frame.size.height){
+        currentScale = scaleWidth;
+        heightAdd = (self.imagePicked.frame.size.height - image.size.height/currentScale) / 2;
+    }else{
+        currentScale = scaleHeight;
+        widhtAdd = (self.imagePicked.frame.size.width - image.size.width/currentScale) / 2;
+    }
+    
+    NSLog(@"37 width %f height %f current %f", scaleWidth, scaleHeight, currentScale);
+    rectangleFeature = [[CardManager getSharedInstance] captureImageRectangle:image];
+    [self.imagePicked setImage:image];
+    [self.imagePicked setClipsToBounds:YES];
+    [self.imagePicked setContentMode:UIViewContentModeScaleAspectFit];
+    [self.imagePicked setUserInteractionEnabled:YES];
+    
+    CGPoint topLeft = CGPointMake(rectangleFeature.topLeft.x/currentScale + widhtAdd, (image.size.height - rectangleFeature.topLeft.y)/currentScale + heightAdd);
+    CGPoint topRight = CGPointMake(rectangleFeature.topRight.x/currentScale + widhtAdd, (image.size.height - rectangleFeature.topRight.y)/currentScale + heightAdd);
+    CGPoint bottomLeft = CGPointMake(rectangleFeature.bottomLeft.x/currentScale + widhtAdd, (image.size.height - rectangleFeature.bottomLeft.y)/currentScale + heightAdd);
+    CGPoint bottomRight = CGPointMake(rectangleFeature.bottomRight.x/currentScale + widhtAdd, (image.size.height - rectangleFeature.bottomRight.y)/currentScale + heightAdd);
+    
+    rectanglePoint = [NSMutableArray arrayWithObjects:[NSValue valueWithCGPoint:topLeft],
+                      [NSValue valueWithCGPoint:topRight],
+                      [NSValue valueWithCGPoint:bottomRight],
+                      [NSValue valueWithCGPoint:bottomLeft], nil];
+    
+    if (CGPointEqualToPoint(topLeft, topRight)) {
+        [self dismissViewControllerAnimated:true completion:nil];
+        [self messageAlert:@"Image is invalid."];
+    } else {
+        
+        UIButton *butTopLeft = [self dragButton:topLeft tag:[rectangleMap[@"topLeft"] integerValue]];
+        [self.imagePicked addSubview:butTopLeft];
+        
+        UIButton *butTopRight = [self dragButton:topRight tag:[rectangleMap[@"topRight"] integerValue]];
+        [self.imagePicked addSubview:butTopRight];
+        
+        UIButton *butBottomLeft = [self dragButton:bottomLeft tag:[rectangleMap[@"bottomLeft"] integerValue]];
+        [self.imagePicked addSubview:butBottomLeft];
+        
+        UIButton *butBottomRight = [self dragButton:bottomRight tag:[rectangleMap[@"bottomRight"] integerValue]];
+        [self.imagePicked addSubview:butBottomRight];
+        [self drawRectangle];
+        [self dismissViewControllerAnimated:true completion:nil];
+    }
+}
+
+
+- (UIButton *)dragButton:(CGPoint) position tag:(NSInteger) tag {
+    CGFloat buttonWidth = 12.0;
+    CGFloat buttonHeight = 12.0;
+    UIButton *button=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    [button setBackgroundColor:[UIColor greenColor]];
+    [button setTag: tag];
+    [button addTarget:self action:@selector(draggedOut:withEvent:) forControlEvents:UIControlEventTouchDragInside];
+    
+    button.frame= CGRectMake(position.x-buttonWidth/2.0f, position.y-buttonHeight/2.0f, buttonWidth, buttonHeight);
+    button.clipsToBounds = YES;
+    
+    button.layer.cornerRadius = buttonWidth/2.0f;
+    button.layer.borderColor=[UIColor greenColor].CGColor;
+    button.layer.borderWidth=2.0f;
+
+    return button;
+}
+
+
+- (void)drawRectangle{
+    if([self.imagePicked.layer.sublayers count] > 4){
+        [[self.imagePicked.layer.sublayers objectAtIndex:4] removeFromSuperlayer];
+    }
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    [path moveToPoint:[rectanglePoint[0] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[1] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[2] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[3] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[0] CGPointValue]];
+    
+    CAShapeLayer *shapeLayer = [CAShapeLayer layer];
+    shapeLayer.path = [path CGPath];
+    shapeLayer.strokeColor = [[UIColor greenColor] CGColor];
+    shapeLayer.lineWidth = 2.0;
+    shapeLayer.fillColor = [[UIColor clearColor] CGColor];
+    [self.imagePicked.layer addSublayer:shapeLayer];
+}
+
+- (IBAction)draggedOut: (id)sender withEvent: (UIEvent *) event {
+    UIButton *selected = (UIButton *)sender;
+    selected.center = [[[event allTouches] anyObject] locationInView:self.view];
+    [rectanglePoint replaceObjectAtIndex:selected.tag withObject:[NSValue valueWithCGPoint:CGPointMake(selected.center.x, selected.center.y)]];
+    [self drawRectangle];
+}
+
+
+- (IBAction)openPhotoButton:(id)sender {
+    UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:nil delegate:self cancelButtonTitle:@"Cancel" destructiveButtonTitle:nil otherButtonTitles:@"Take Photo",@"To Select Albums", nil];
+    [sheet showInView:self.view];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+    if (buttonIndex == 0) { // take photo
+        [self performSegueWithIdentifier:@"takePhoto" sender:nil];
+    } else if (buttonIndex == 1) {
+        if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+            UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+            picker.delegate = self;
+            [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
+            picker.allowsEditing = YES;
+            [self presentViewController:picker animated:true completion:nil];
+        }
+    }
+}
+
+- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
+    if ([[segue identifier] isEqualToString:@"takePhoto"]) {
+        NSLog(@"167");
+    }
+}
+
+- (IBAction)saveImageButton:(id)sender {
+   
+    CGPoint currentTopLeft = [rectanglePoint[[rectangleMap[@"topLeft"] integerValue]] CGPointValue];
+    CGPoint currentTopRight = [rectanglePoint[[rectangleMap[@"topRight"] integerValue]] CGPointValue];
+    CGPoint currentBottomLeft = [rectanglePoint[[rectangleMap[@"bottomLeft"] integerValue]] CGPointValue];
+    CGPoint currentBottomRight = [rectanglePoint[[rectangleMap[@"bottomRight"] integerValue]] CGPointValue];
+    
+    if (self.imagePicked.image && !CGPointEqualToPoint(currentTopLeft, currentTopRight)) {
+        CGPoint captureTopLeft = CGPointMake((currentTopLeft.x - widhtAdd) * currentScale, (self.imagePicked.image.size.height - (currentTopLeft.y - heightAdd) * currentScale));
+        CGPoint captureTopRight = CGPointMake((currentTopRight.x - widhtAdd) * currentScale, (self.imagePicked.image.size.height - (currentTopRight.y - heightAdd) * currentScale));
+        CGPoint captureBottomLeft = CGPointMake((currentBottomLeft.x - widhtAdd) * currentScale, (self.imagePicked.image.size.height - (currentBottomLeft.y - heightAdd) * currentScale));
+        CGPoint captureBottomRight = CGPointMake((currentBottomRight.x - widhtAdd) * currentScale, (self.imagePicked.image.size.height - (currentBottomRight.y - heightAdd) * currentScale));
+        
+        NSMutableDictionary *rectangleCoordinates = [NSMutableDictionary new];
+        rectangleCoordinates[@"inputTopLeft"] = [CIVector vectorWithCGPoint:captureTopLeft];
+        rectangleCoordinates[@"inputTopRight"] = [CIVector vectorWithCGPoint:captureTopRight];
+        rectangleCoordinates[@"inputBottomLeft"] = [CIVector vectorWithCGPoint:captureBottomLeft];
+        rectangleCoordinates[@"inputBottomRight"] = [CIVector vectorWithCGPoint:captureBottomRight];
+        
+        NSString *filePath = [[CardManager getSharedInstance] captureImageCard:self.imagePicked.image withCoordinates:rectangleCoordinates];
+        
+        UIImage *captureImage = [UIImage imageWithContentsOfFile:filePath];
+        [self.imagePicked.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+        [self.imagePicked.layer setSublayers:nil];
+        [self.imagePicked setImage:captureImage];
+        
+        CGPoint initalPoint = CGPointMake(0, 0);
+        rectanglePoint = [NSMutableArray arrayWithObjects:[NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint], nil];
+    } else {
+        [self messageAlert:@"Please choose image first."];
+    
+    }
+}
+
+- (void)messageAlert:(NSString *)message {
+    UIAlertController *alert = [UIAlertController
+                                alertControllerWithTitle:@""
+                                message:message
+                                preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *cancel = [UIAlertAction
+                             actionWithTitle:@"OK"
+                             style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction * action)
+                             {
+                                 [alert dismissViewControllerAnimated:YES completion:nil];
+                                 
+                             }];
+    
+    [alert addAction:cancel];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [((UINavigationController *)[UIApplication sharedApplication].keyWindow.rootViewController) presentViewController:alert animated:YES completion:nil];
+        
+    });
+
+}
+@end

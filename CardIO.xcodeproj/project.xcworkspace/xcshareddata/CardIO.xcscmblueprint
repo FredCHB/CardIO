@@ -1,0 +1,25 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "a81a91c3-a3de-46ec-a43d-9c7f329cb715++6717",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+    "a81a91c3-a3de-46ec-a43d-9c7f329cb715++6717" : {
+
+    }
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "a81a91c3-a3de-46ec-a43d-9c7f329cb715++6717" : 0
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "391A1F61-F235-488B-AA6F-017C0EE1B8A1",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "a81a91c3-a3de-46ec-a43d-9c7f329cb715++6717" : "CardIO\/"
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "CardIO",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "CardIO.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "http:\/\/svn.motherapp.com",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Subversion",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "a81a91c3-a3de-46ec-a43d-9c7f329cb715++6717"
+    }
+  ]
+}

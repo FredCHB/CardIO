@@ -1,0 +1,67 @@
+//
+//  ViewController.m
+//  CardIO
+//
+//  Created by Fred on 7/11/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import "ViewController.h"
+
+#import "CardViewController.h"
+
+@interface ViewController ()
+
+
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+-(void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info {
+    UIImage *image = [info objectForKey:UIImagePickerControllerOriginalImage];
+    self.imagePicked.image = image;
+    [self dismissViewControllerAnimated:true completion:nil];
+}
+
+- (IBAction)openCameraButton:(id)sender {
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
+        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+        picker.delegate = self;
+        [picker setSourceType:UIImagePickerControllerSourceTypeCamera];
+        picker.allowsEditing = false;
+        [self presentViewController:picker animated:true completion:nil];
+    }
+}
+
+- (IBAction)openPhotoLibraryButton:(id)sender {
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+        picker.delegate = self;
+        [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
+        picker.allowsEditing = true;
+        [self presentViewController:picker animated:true completion:nil];
+    }
+}
+
+- (IBAction)saveImageButton:(id)sender {
+    NSData *imageData = UIImageJPEGRepresentation(self.imagePicked.image, 0.6);
+    UIImage *compressedJPGImage = [UIImage imageWithData:imageData];
+    UIImageWriteToSavedPhotosAlbum(compressedJPGImage, nil, nil, nil);
+    
+    UIAlertView *alert = [[UIAlertView alloc]initWithTitle: @"Wow"
+                                                   message:@"Your image has been saved to Photo Library!" delegate:nil
+                                         cancelButtonTitle:@"Ok"
+                                         otherButtonTitles:nil, nil];
+    [alert show];
+}
+@end

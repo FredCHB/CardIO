@@ -1,0 +1,361 @@
+//
+//  ViewController.m
+//  CardIO
+//
+//  Created by Fred on 7/11/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import "ViewController.h"
+#import "CardManager.h"
+
+@interface ViewController ()
+
+@end
+
+@implementation ViewController{
+    NSMutableArray *rectanglePoint;
+    NSDictionary *rectangleMap;
+    CIRectangleFeature *rectangleFeature;
+    CGFloat currentScale;
+    CGFloat widthAdd;
+    CGFloat heightAdd;
+    Boolean autoDetection;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.navigationController.navigationBar.hidden = YES;
+    autoDetection = YES;
+    rectangleMap = [[NSDictionary alloc] initWithObjectsAndKeys: [NSNumber numberWithInt:0], @"topLeft",
+                                                                 [NSNumber numberWithInt:1], @"topRight",
+                                                                 [NSNumber numberWithInt:2], @"bottomRight",
+                                                                 [NSNumber numberWithInt:3], @"bottomLeft", nil];
+    
+}
+
+-(void)viewWillAppear:(BOOL)animated{
+    
+    if (self.previousType == ChoosePhoto) {
+        self.topImagePicker.constant = 49.0f;
+        self.bottomImagePicker.constant = 128.0f;
+    } else {
+        self.topImagePicker.constant = 0.0f;
+        self.bottomImagePicker.constant = 0.0f;
+    }
+}
+
+-(void)viewDidAppear:(BOOL)animated{
+    if (self.imageData  && self.previousType == TakePhoto) {
+        [self scanImageCard:self.imageData fromPhotoLibrary:NO];
+    }
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+-(void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info {
+    
+    [self.imagePicked.layer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    UIImage *image = [info objectForKey:UIImagePickerControllerOriginalImage];
+    self.imageData = image;
+    self.previousType = ChoosePhoto;
+    [self scanImageCard:image fromPhotoLibrary:YES];
+    
+}
+
+-(void)scanImageCard:(UIImage *)image fromPhotoLibrary:(Boolean)fromPhotoLibrary {
+    
+    [self.imagePicked.layer.sublayers makeObjectsPerformSelector:@selector(removeFromSuperlayer)];
+    self.imagePicked.backgroundColor = [UIColor blackColor];
+    
+    CGFloat scaleWidth = image.size.width/self.imagePicked.frame.size.width;
+    CGFloat scaleHeight = image.size.height/self.imagePicked.frame.size.height;
+    currentScale = 1;
+    widthAdd = 0;
+    heightAdd = 0;
+    if(image.size.width/image.size.height > self.imagePicked.frame.size.width/self.imagePicked.frame.size.height){
+        currentScale = scaleWidth;
+        heightAdd = (self.imagePicked.frame.size.height - image.size.height/currentScale) / 2;
+    }else{
+        currentScale = scaleHeight;
+        widthAdd = (self.imagePicked.frame.size.width - image.size.width/currentScale) / 2;
+    }
+    
+    [self.imagePicked setImage:image];
+    [self.imagePicked setClipsToBounds:NO];
+    [self.imagePicked setContentMode:UIViewContentModeScaleAspectFit];
+    [self.imagePicked setUserInteractionEnabled:YES];
+    
+    CGPoint topLeft;
+    CGPoint topRight;
+    CGPoint bottomLeft;
+    CGPoint bottomRight;
+    
+    if (autoDetection) {
+        rectangleFeature = [[CardManager getSharedInstance] captureImageRectangle:image];
+        
+        if ([self positiveImageOrientation]) {
+            topLeft = CGPointMake(rectangleFeature.topLeft.x/currentScale + widthAdd, (image.size.height - rectangleFeature.topLeft.y)/currentScale + heightAdd);
+            topRight = CGPointMake(rectangleFeature.topRight.x/currentScale + widthAdd, (image.size.height - rectangleFeature.topRight.y)/currentScale + heightAdd);
+            bottomLeft = CGPointMake(rectangleFeature.bottomLeft.x/currentScale + widthAdd, (image.size.height - rectangleFeature.bottomLeft.y)/currentScale + heightAdd);
+            bottomRight = CGPointMake(rectangleFeature.bottomRight.x/currentScale + widthAdd, (image.size.height - rectangleFeature.bottomRight.y)/currentScale + heightAdd);
+        } else {
+            topLeft = CGPointMake(rectangleFeature.bottomLeft.y/currentScale + widthAdd, rectangleFeature.bottomLeft.x/currentScale + heightAdd);
+            topRight = CGPointMake(rectangleFeature.topLeft.y/currentScale + widthAdd, rectangleFeature.topLeft.x/currentScale + heightAdd);
+            bottomLeft = CGPointMake(rectangleFeature.bottomRight.y/currentScale + widthAdd, rectangleFeature.bottomRight.x/currentScale + heightAdd);
+            bottomRight = CGPointMake(rectangleFeature.topRight.y/currentScale + widthAdd, rectangleFeature.topRight.x/currentScale + heightAdd);
+        }
+        
+    } else {
+        CGFloat frameWidth = self.imagePicked.frame.size.width;
+        CGFloat frameHeight;
+        CGFloat topMargin;
+        if (self.previousType == ChoosePhoto) {
+            topMargin = 0;
+            frameHeight = self.imagePicked.frame.size.height;
+        } else {
+            topMargin = 49;
+            frameHeight = self.imagePicked.frame.size.height - topMargin - 128;
+        }
+        
+        CGFloat rectangleWidth = frameHeight*0.82/1.697;
+        
+        topLeft = CGPointMake((frameWidth - rectangleWidth)/2, frameHeight*0.09+topMargin);
+        topRight = CGPointMake((frameWidth - rectangleWidth)/2 + rectangleWidth, frameHeight*0.09+topMargin);
+        bottomLeft = CGPointMake((frameWidth - rectangleWidth)/2, frameHeight*0.91+topMargin);
+        bottomRight = CGPointMake((frameWidth - rectangleWidth)/2 + rectangleWidth, frameHeight*0.91+topMargin);
+        
+    }
+    
+    rectanglePoint = [NSMutableArray arrayWithObjects:[NSValue valueWithCGPoint:topLeft],
+                      [NSValue valueWithCGPoint:topRight],
+                      [NSValue valueWithCGPoint:bottomRight],
+                      [NSValue valueWithCGPoint:bottomLeft], nil];
+    
+    if (CGPointEqualToPoint(topLeft, topRight)) {
+        if (fromPhotoLibrary) {
+            [self dismissViewControllerAnimated:true completion:nil];
+        }
+        [self messageAlert:@"Image is invalid, please retry."];
+    } else {
+        
+        UIButton *btnTopLeft = [self dragButton:topLeft tag:[rectangleMap[@"topLeft"] integerValue]];
+        [self.imagePicked addSubview:btnTopLeft];
+        
+        UIButton *btnTopRight = [self dragButton:topRight tag:[rectangleMap[@"topRight"] integerValue]];
+        [self.imagePicked addSubview:btnTopRight];
+        
+        UIButton *btnBottomLeft = [self dragButton:bottomLeft tag:[rectangleMap[@"bottomLeft"] integerValue]];
+        [self.imagePicked addSubview:btnBottomLeft];
+        
+        UIButton *btnBottomRight = [self dragButton:bottomRight tag:[rectangleMap[@"bottomRight"] integerValue]];
+        [self.imagePicked addSubview:btnBottomRight];
+        [self drawRectangle];
+        if (fromPhotoLibrary) {
+            [self dismissViewControllerAnimated:true completion:nil];
+        }
+    }
+}
+
+
+- (UIButton *)dragButton:(CGPoint) position tag:(NSInteger) tag {
+    
+    UIView *circleView = [[UIView alloc] initWithFrame:CGRectMake(13,13,14,14)];
+    circleView.alpha = 1;
+    circleView.layer.cornerRadius = 7.0f;
+    circleView.backgroundColor = UIColorFromRGB(0x61D2CA);
+    circleView.userInteractionEnabled = NO;
+    
+    
+    CGFloat buttonWidth = 40.0;
+    CGFloat buttonHeight = 40.0;
+    UIButton *button=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    
+    [button addSubview:circleView];
+    [button setTag: tag];
+    [button addTarget:self action:@selector(draggedOut:withEvent:) forControlEvents:UIControlEventTouchDragInside];
+    
+    button.frame= CGRectMake(position.x-buttonWidth/2.0f, position.y-buttonHeight/2.0f, buttonWidth, buttonHeight);
+    button.clipsToBounds = YES;
+    
+    button.layer.cornerRadius = buttonWidth/2.0f;
+
+    return button;
+}
+
+
+- (void)drawRectangle{
+    if([self.imagePicked.layer.sublayers count] > 4){
+        [[self.imagePicked.layer.sublayers objectAtIndex:4] removeFromSuperlayer];
+    }
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    [path moveToPoint:[rectanglePoint[0] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[1] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[2] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[3] CGPointValue]];
+    [path addLineToPoint:[rectanglePoint[0] CGPointValue]];
+    
+    CAShapeLayer *shapeLayer = [CAShapeLayer layer];
+    shapeLayer.path = [path CGPath];
+    shapeLayer.strokeColor = [UIColorFromRGB(0x61D2CA) CGColor];
+    shapeLayer.lineWidth = 1.0;
+    shapeLayer.fillColor = [[UIColor clearColor] CGColor];
+    [self.imagePicked.layer addSublayer:shapeLayer];
+}
+
+- (IBAction)draggedOut: (id)sender withEvent: (UIEvent *) event {
+    UIButton *selected = (UIButton *)sender;
+    selected.center = [[[event allTouches] anyObject] locationInView:self.imagePicked];
+    
+    CGFloat currentImagePickedHeight = self.imagePicked.frame.size.height;
+    
+    if (self.previousType == TakePhoto) {
+        if (selected.center.y > (SCREEN_HEIGHT-130)) {
+            selected.center = CGPointMake(selected.center.x, SCREEN_HEIGHT-130);
+        } else if (selected.center.y < 51) {
+            selected.center = CGPointMake(selected.center.x, 51);
+        }
+    } else {
+        if (selected.center.y < 0) {
+            selected.center = CGPointMake(selected.center.x, 0);
+        } else if (selected.center.y > currentImagePickedHeight){
+            selected.center = CGPointMake(selected.center.x, currentImagePickedHeight);
+        }
+    }
+    
+    [rectanglePoint replaceObjectAtIndex:selected.tag withObject:[NSValue valueWithCGPoint:CGPointMake(selected.center.x, selected.center.y)]];
+    [self drawRectangle];
+}
+
+
+- (IBAction)openPhotoButton:(id)sender {
+    
+    UIAlertController *actionSheet = [[UIAlertController alloc] init];
+    
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }]];
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Take Photo" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        
+        [self performSegueWithIdentifier:@"takePhoto" sender:nil];
+    }]];
+    
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"To Select Albums" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        
+        self.topImagePicker.constant = 49.0f;
+        self.bottomImagePicker.constant = 128.0f;
+        
+        if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+            UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+            picker.delegate = self;
+            [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
+            [self presentViewController:picker animated:true completion:nil];
+        }
+    }]];
+    
+    [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
+- (IBAction)saveImageButton:(id)sender {
+   
+    CGPoint currentTopLeft = [rectanglePoint[[rectangleMap[@"topLeft"] integerValue]] CGPointValue];
+    CGPoint currentTopRight = [rectanglePoint[[rectangleMap[@"topRight"] integerValue]] CGPointValue];
+    CGPoint currentBottomLeft = [rectanglePoint[[rectangleMap[@"bottomLeft"] integerValue]] CGPointValue];
+    CGPoint currentBottomRight = [rectanglePoint[[rectangleMap[@"bottomRight"] integerValue]] CGPointValue];
+    
+    CGFloat offsetX = 0.0;
+    CGFloat offsetY = 5.0;
+    
+    if (self.imagePicked.image && !CGPointEqualToPoint(currentTopLeft, currentTopRight)) {
+        CGPoint captureTopLeft;
+        CGPoint captureTopRight;
+        CGPoint captureBottomLeft;
+        CGPoint captureBottomRight;
+        
+        CGFloat rotateDegree;
+        NSLog(@"image info %ld", (long)self.imageData.imageOrientation);
+        NSLog(@"heightAdd %f",heightAdd);
+        
+        if (([Utils isIOSLeastVersion9] && (self.previousType == TakePhoto || heightAdd || (long)self.imageData.imageOrientation==0)) ||
+            (![Utils isIOSLeastVersion9] && (heightAdd || (long)self.imageData.imageOrientation==0))) {
+            captureTopLeft = CGPointMake((currentTopLeft.x - widthAdd) * currentScale + offsetX, (self.imagePicked.image.size.height - (currentTopLeft.y - heightAdd) * currentScale));
+            captureTopRight = CGPointMake((currentTopRight.x - widthAdd) * currentScale , (self.imagePicked.image.size.height - (currentTopRight.y - heightAdd) * currentScale));
+            captureBottomLeft = CGPointMake((currentBottomLeft.x - widthAdd) * currentScale + offsetX, (self.imagePicked.image.size.height - (currentBottomLeft.y - heightAdd) * currentScale - offsetY));
+            captureBottomRight = CGPointMake((currentBottomRight.x - widthAdd) * currentScale, (self.imagePicked.image.size.height - (currentBottomRight.y - heightAdd) * currentScale - offsetY));
+            rotateDegree = 90;
+        } else {
+            captureBottomRight = CGPointMake((currentBottomLeft.y - heightAdd) * currentScale, (currentBottomLeft.x - widthAdd) * currentScale);
+            captureTopRight = CGPointMake( ((currentBottomRight.y - heightAdd) * currentScale), (currentBottomRight.x - widthAdd) * currentScale);
+            captureBottomLeft = CGPointMake( ((currentTopLeft.y - heightAdd) * currentScale), (currentTopLeft.x - widthAdd) * currentScale);
+            captureTopLeft = CGPointMake(((currentTopRight.y - heightAdd) * currentScale), (currentTopRight.x - widthAdd) * currentScale);
+            rotateDegree = 0;
+        }
+
+        
+        NSMutableDictionary *rectangleCoordinates = [NSMutableDictionary new];
+        rectangleCoordinates[@"inputTopLeft"] = [CIVector vectorWithCGPoint:captureTopLeft];
+        rectangleCoordinates[@"inputTopRight"] = [CIVector vectorWithCGPoint:captureTopRight];
+        rectangleCoordinates[@"inputBottomLeft"] = [CIVector vectorWithCGPoint:captureBottomLeft];
+        rectangleCoordinates[@"inputBottomRight"] = [CIVector vectorWithCGPoint:captureBottomRight];
+        
+        NSString *filePath = [[CardManager getSharedInstance] captureImageCard:self.imagePicked.image withCoordinates:rectangleCoordinates rotateDegree:rotateDegree];
+        UIImage *captureImage = [UIImage imageWithContentsOfFile:filePath];
+        [self.imagePicked.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+        [self.imagePicked.layer setSublayers:nil];
+        [self.imagePicked setImage:captureImage];
+        
+        CGPoint initalPoint = CGPointMake(0, 0);
+        rectanglePoint = [NSMutableArray arrayWithObjects:[NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint],
+                          [NSValue valueWithCGPoint:initalPoint], nil];
+    } else {
+        [self messageAlert:@"Please choose image first."];
+    
+    }
+}
+
+- (void)messageAlert:(NSString *)message {
+    UIAlertController *alert = [UIAlertController
+                                alertControllerWithTitle:@""
+                                message:message
+                                preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *cancel = [UIAlertAction
+                             actionWithTitle:@"OK"
+                             style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction * action)
+                             {
+                                 [alert dismissViewControllerAnimated:YES completion:nil];
+                                 
+                             }];
+    
+    [alert addAction:cancel];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [((UINavigationController *)[UIApplication sharedApplication].keyWindow.rootViewController) presentViewController:alert animated:YES completion:nil];
+        
+    });
+
+}
+
+-(Boolean)positiveImageOrientation{
+    Boolean positiveOrientation = NO;
+    if (([Utils isIOSLeastVersion9] && (self.previousType == TakePhoto || heightAdd || (long)self.imageData.imageOrientation==0))
+        || (![Utils isIOSLeastVersion9] && (heightAdd || (long)self.imageData.imageOrientation==0))) {
+        positiveOrientation = YES;
+    }
+    return positiveOrientation;
+}
+
+-(BOOL)prefersStatusBarHidden{
+    return YES;
+}
+
+@end

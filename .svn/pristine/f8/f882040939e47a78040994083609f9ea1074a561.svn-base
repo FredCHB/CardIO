@@ -1,0 +1,158 @@
+//
+//  CardManager.m
+//  CardIO
+//
+//  Created by Fred on 7/12/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import "CardManager.h"
+#import <AVFoundation/AVFoundation.h>
+#import <MobileCoreServices/MobileCoreServices.h>
+#import <ImageIO/ImageIO.h>
+
+static CardManager *sharedInstance = nil;
+
+@implementation CardManager
+
++(CardManager*)getSharedInstance{
+    if (!sharedInstance) {
+        sharedInstance = [[super allocWithZone:NULL]init];
+    }
+    return sharedInstance;
+}
+
+- (CIRectangleFeature *)captureImageRectangle:(UIImage *)image{
+    
+    CIImage *enhancedImage = [[CIImage alloc] initWithImage:image options:@{kCIImageColorSpace:[NSNull null]}];
+    enhancedImage = [self filteredImageUsingContrastFilterOnImage:enhancedImage];
+    CIRectangleFeature *rectangleFeature = [self biggestRectangleInRectangles:[[self highAccuracyRectangleDetector] featuresInImage:enhancedImage]];
+    return rectangleFeature;
+    
+}
+
+- (NSString *)captureImageCard:(UIImage *)image withCoordinates:(NSDictionary *)rectangleCoordinates{
+    NSString *filePath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"ipdf_img_%i.jpeg",(int)[NSDate date].timeIntervalSince1970]];
+    
+    CIImage *enhancedImage = [[CIImage alloc] initWithImage:image options:@{kCIImageColorSpace:[NSNull null]}];
+    enhancedImage = [self filteredImageUsingContrastFilterOnImage:enhancedImage];
+    enhancedImage = [enhancedImage imageByApplyingFilter:@"CIPerspectiveCorrection" withInputParameters:rectangleCoordinates];
+    
+    CIFilter *transform = [CIFilter filterWithName:@"CIAffineTransform"];
+    [transform setValue:enhancedImage forKey:kCIInputImageKey];
+    NSValue *rotation = [NSValue valueWithCGAffineTransform:CGAffineTransformMakeRotation(-90 * (M_PI/180))];
+    [transform setValue:rotation forKey:@"inputTransform"];
+    enhancedImage = [transform outputImage];
+    
+    if (!enhancedImage || CGRectIsEmpty(enhancedImage.extent)) return nil;
+    
+    static CIContext *ctx = nil;
+    if (!ctx)
+    {
+        ctx = [CIContext contextWithOptions:@{kCIContextWorkingColorSpace:[NSNull null]}];
+    }
+    
+    CGSize bounds = enhancedImage.extent.size;
+    bounds = CGSizeMake(floorf(bounds.width / 4) * 4,floorf(bounds.height / 4) * 4);
+    CGRect extent = CGRectMake(enhancedImage.extent.origin.x, enhancedImage.extent.origin.y, bounds.width, bounds.height);
+    
+    static int bytesPerPixel = 8;
+    uint rowBytes = bytesPerPixel * bounds.width;
+    uint totalBytes = rowBytes * bounds.height;
+    uint8_t *byteBuffer = malloc(totalBytes);
+    
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    
+    [ctx render:enhancedImage toBitmap:byteBuffer rowBytes:rowBytes bounds:extent format:kCIFormatRGBA8 colorSpace:colorSpace];
+    
+    CGContextRef bitmapContext = CGBitmapContextCreate(byteBuffer,bounds.width,bounds.height,bytesPerPixel,rowBytes,colorSpace,kCGImageAlphaNoneSkipLast);
+    CGImageRef imgRef = CGBitmapContextCreateImage(bitmapContext);
+    CGColorSpaceRelease(colorSpace);
+    CGContextRelease(bitmapContext);
+    free(byteBuffer);
+    
+    if (imgRef == NULL)
+    {
+        CFRelease(imgRef);
+        return nil;
+    }
+    saveCGImageAsJPEGToFilePath(imgRef, filePath);
+    CFRelease(imgRef);
+    
+    return filePath;
+}
+
+void saveCGImageAsJPEGToFilePath(CGImageRef imageRef, NSString *filePath)
+{
+    @autoreleasepool
+    {
+        CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:filePath];
+        CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypeJPEG, 1, NULL);
+        CGImageDestinationAddImage(destination, imageRef, nil);
+        CGImageDestinationFinalize(destination);
+        CFRelease(destination);
+    }
+}
+
+- (CIImage *)correctPerspectiveForImage:(UIImage *)image withFeatures:(CIRectangleFeature *)rectangleFeature
+{
+    CIImage *enhancedImage = [[CIImage alloc] initWithImage:image options:@{kCIImageColorSpace:[NSNull null]}];
+    NSMutableDictionary *rectangleCoordinates = [NSMutableDictionary new];
+    rectangleCoordinates[@"inputTopLeft"] = [CIVector vectorWithCGPoint:rectangleFeature.topLeft];
+    rectangleCoordinates[@"inputTopRight"] = [CIVector vectorWithCGPoint:rectangleFeature.topRight];
+    rectangleCoordinates[@"inputBottomLeft"] = [CIVector vectorWithCGPoint:rectangleFeature.bottomLeft];
+    rectangleCoordinates[@"inputBottomRight"] = [CIVector vectorWithCGPoint:rectangleFeature.bottomRight];
+    return [enhancedImage imageByApplyingFilter:@"CIPerspectiveCorrection" withInputParameters:rectangleCoordinates];
+}
+
+- (CIImage *)filteredImageUsingEnhanceFilterOnImage:(CIImage *)image
+{
+    return [CIFilter filterWithName:@"CIColorControls" keysAndValues:kCIInputImageKey, image, @"inputBrightness", [NSNumber numberWithFloat:0.0], @"inputContrast", [NSNumber numberWithFloat:1.14], @"inputSaturation", [NSNumber numberWithFloat:0.0], nil].outputImage;
+}
+
+- (CIImage *)filteredImageUsingContrastFilterOnImage:(CIImage *)image
+{
+    return [CIFilter filterWithName:@"CIColorControls" withInputParameters:@{@"inputContrast":@(1.1),kCIInputImageKey:image}].outputImage;
+}
+
+- (CIDetector *)highAccuracyRectangleDetector
+{
+    static CIDetector *detector = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^
+                  {
+                      detector = [CIDetector detectorOfType:CIDetectorTypeRectangle context:nil options:@{CIDetectorAccuracy : CIDetectorAccuracyHigh}];
+                  });
+    return detector;
+}
+
+- (CIRectangleFeature *)biggestRectangleInRectangles:(NSArray *)rectangles
+{
+    if (![rectangles count]) return nil;
+    
+    float halfPerimiterValue = 0;
+    
+    CIRectangleFeature *biggestRectangle = [rectangles firstObject];
+    
+    for (CIRectangleFeature *rect in rectangles)
+    {
+        CGPoint p1 = rect.topLeft;
+        CGPoint p2 = rect.topRight;
+        CGFloat width = hypotf(p1.x - p2.x, p1.y - p2.y);
+        
+        CGPoint p3 = rect.topLeft;
+        CGPoint p4 = rect.bottomLeft;
+        CGFloat height = hypotf(p3.x - p4.x, p3.y - p4.y);
+        
+        CGFloat currentHalfPerimiterValue = height + width;
+        
+        if (halfPerimiterValue < currentHalfPerimiterValue)
+        {
+            halfPerimiterValue = currentHalfPerimiterValue;
+            biggestRectangle = rect;
+        }
+    }
+    return biggestRectangle;
+}
+
+@end

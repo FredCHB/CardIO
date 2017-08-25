@@ -1,0 +1,19 @@
+//
+//  ViewController.h
+//  CardIO
+//
+//  Created by Fred on 7/11/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "RectangleUIImageView.h"
+
+@interface ViewController : UIViewController <UINavigationControllerDelegate, UIImagePickerControllerDelegate>
+
+@property (strong, nonatomic) IBOutlet UIImageView *imagePicked;
+- (IBAction)openCameraButton:(id)sender;
+- (IBAction)openPhotoLibraryButton:(id)sender;
+- (IBAction)saveImageButton:(id)sender;
+@end
+

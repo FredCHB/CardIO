@@ -1,0 +1,102 @@
+//
+//  ViewController.m
+//  CardIO
+//
+//  Created by Fred on 7/11/16.
+//  Copyright © 2016 Fred. All rights reserved.
+//
+
+#import "ViewController.h"
+
+#import "CardManager.h"
+
+@interface ViewController ()
+
+@end
+
+@implementation ViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+-(void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info {
+    UIImage *image = [info objectForKey:UIImagePickerControllerOriginalImage];
+    
+    NSLog(@"image width height:%f %f", image.size.width, image.size.height);
+    NSLog(@"view width height:%f %f", self.imagePicked.frame.size.width, self.imagePicked.frame.size.height);
+    
+    CGFloat scaleWidth = image.size.width/self.imagePicked.frame.size.width;
+    CGFloat scaleHeight = image.size.height/self.imagePicked.frame.size.height;
+    CGFloat currentScale = scaleWidth;
+    //CGFloat scaleAdd = (self.imagePicked.frame.size.height - image.size.height/currentScale)/2;
+    
+    NSLog(@"37 %f %f", scaleWidth, scaleHeight);
+    CIRectangleFeature *rectangleFeature = [[CardManager getSharedInstance] captureImageRectangle:image];
+    NSLog(@"top left position %f %f", rectangleFeature.topLeft.x, rectangleFeature.topLeft.y);
+    [self.imagePicked setImage:image];
+    [self.imagePicked setClipsToBounds:YES];
+    [self.imagePicked setContentMode:UIViewContentModeScaleAspectFit];
+    [self.imagePicked setUserInteractionEnabled:YES];
+    
+    NSLog(@"42 %f", self.imagePicked.image.size.width);
+    UIButton *butTopLeft=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    butTopLeft.frame= CGRectMake(rectangleFeature.topLeft.x/currentScale, rectangleFeature.topLeft.y/currentScale, 15, 15);
+    [butTopLeft setBackgroundColor:[UIColor redColor]];
+    [self.imagePicked addSubview:butTopLeft];
+    
+    UIButton *butTopRight=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    butTopRight.frame= CGRectMake(rectangleFeature.topRight.x/currentScale, rectangleFeature.topRight.y/currentScale, 15, 15);
+    [butTopRight setBackgroundColor:[UIColor redColor]];
+    [self.imagePicked addSubview:butTopRight];
+    
+    UIButton *butBottomLeft=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    butBottomLeft.frame= CGRectMake(rectangleFeature.bottomLeft.x/currentScale, rectangleFeature.bottomLeft.y/currentScale, 15, 15);
+    [butBottomLeft setBackgroundColor:[UIColor redColor]];
+    [self.imagePicked addSubview:butBottomLeft];
+    
+    UIButton *butBottomRight=[UIButton buttonWithType:UIButtonTypeRoundedRect];
+    butBottomRight.frame= CGRectMake(rectangleFeature.bottomRight.x/currentScale, rectangleFeature.bottomRight.y/currentScale, 15, 15);
+    [butBottomRight setBackgroundColor:[UIColor redColor]];
+    [self.imagePicked addSubview:butBottomRight];
+    [self dismissViewControllerAnimated:true completion:nil];
+}
+
+- (IBAction)openCameraButton:(id)sender {
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
+        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+        picker.delegate = self;
+        [picker setSourceType:UIImagePickerControllerSourceTypeCamera];
+        picker.allowsEditing = false;
+        [self presentViewController:picker animated:true completion:nil];
+    }
+}
+
+- (IBAction)openPhotoLibraryButton:(id)sender {
+    if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+        picker.delegate = self;
+        [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
+        picker.allowsEditing = true;
+        [self presentViewController:picker animated:true completion:nil];
+    }
+}
+
+- (IBAction)saveImageButton:(id)sender {
+    NSData *imageData = UIImageJPEGRepresentation(self.imagePicked.image, 0.6);
+    UIImage *compressedJPGImage = [UIImage imageWithData:imageData];
+    UIImageWriteToSavedPhotosAlbum(compressedJPGImage, nil, nil, nil);
+    
+    UIAlertView *alert = [[UIAlertView alloc]initWithTitle: @"Wow"
+                                                   message:@"Your image has been saved to Photo Library!" delegate:nil
+                                         cancelButtonTitle:@"Ok"
+                                         otherButtonTitles:nil, nil];
+    [alert show];
+}
+@end
